@@ -37,7 +37,16 @@ urbannix_app/
 3. **Novo orçamento** → escolha o cliente, adicione os itens, e clique em
    "Finalizar orçamento e gerar PDF". O estoque é atualizado automaticamente.
 4. Baixe o PDF gerado e envie pelo WhatsApp Web ou pelo celular
-5. **Orçamentos** → veja o histórico e mude o status (Pendente/Aprovado/Recusado)
+5. **Orçamentos** → veja o histórico e mude o status (Pendente/Aprovado/Recusado).
+   Ao marcar como **Aprovado**, o sistema já cria automaticamente um
+   lançamento "a receber" em Financeiro, no valor total do orçamento.
+6. **Financeiro** → acompanhe:
+   - Totais de "a receber", "a pagar", recebido e pago no mês (no topo)
+   - Gráfico de faturamento dos últimos 6 meses
+   - Listas de contas a receber/pagar pendentes, com botão para marcar como
+     quitadas
+   - Lançamentos manuais (ex: compra de insumos, aluguel, contas fixas)
+   - Histórico de tudo que já foi pago/recebido
 
 ## Como sua esposa acessa pelo celular, de qualquer lugar
 

@@ -63,6 +63,19 @@ def init_db():
                 FOREIGN KEY (orcamento_id) REFERENCES orcamentos (id),
                 FOREIGN KEY (produto_id) REFERENCES produtos (id)
             );
+
+            CREATE TABLE IF NOT EXISTS financeiro (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tipo TEXT NOT NULL CHECK (tipo IN ('Receber', 'Pagar')),
+                descricao TEXT NOT NULL,
+                valor REAL NOT NULL,
+                vencimento TEXT,
+                status TEXT NOT NULL DEFAULT 'Pendente' CHECK (status IN ('Pendente', 'Pago')),
+                data_pagamento TEXT,
+                orcamento_id INTEGER,
+                criado_em TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (orcamento_id) REFERENCES orcamentos (id)
+            );
             """
         )
 
@@ -172,3 +185,94 @@ def atualizar_status_orcamento(orcamento_id, novo_status):
         conn.execute(
             "UPDATE orcamentos SET status = ? WHERE id = ?", (novo_status, orcamento_id)
         )
+
+
+# ---------- FINANCEIRO ----------
+
+def add_lancamento(tipo, descricao, valor, vencimento=None, orcamento_id=None):
+    """tipo: 'Receber' ou 'Pagar'."""
+    with get_conn() as conn:
+        conn.execute(
+            """INSERT INTO financeiro (tipo, descricao, valor, vencimento, orcamento_id)
+               VALUES (?, ?, ?, ?, ?)""",
+            (tipo, descricao, valor, vencimento, orcamento_id),
+        )
+
+
+def existe_lancamento_para_orcamento(orcamento_id):
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM financeiro WHERE orcamento_id = ? LIMIT 1", (orcamento_id,)
+        ).fetchone()
+        return row is not None
+
+
+def get_lancamentos(tipo=None, status=None):
+    query = "SELECT * FROM financeiro"
+    condicoes = []
+    params = []
+    if tipo:
+        condicoes.append("tipo = ?")
+        params.append(tipo)
+    if status:
+        condicoes.append("status = ?")
+        params.append(status)
+    if condicoes:
+        query += " WHERE " + " AND ".join(condicoes)
+    query += " ORDER BY (vencimento IS NULL), vencimento, criado_em"
+    with get_conn() as conn:
+        return conn.execute(query, params).fetchall()
+
+
+def marcar_como_pago(lancamento_id):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE financeiro SET status = 'Pago', data_pagamento = datetime('now') WHERE id = ?",
+            (lancamento_id,),
+        )
+
+
+def excluir_lancamento(lancamento_id):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM financeiro WHERE id = ?", (lancamento_id,))
+
+
+def resumo_financeiro():
+    """Retorna totais: a receber pendente, a pagar pendente, recebido e pago no mês atual."""
+    with get_conn() as conn:
+        a_receber = conn.execute(
+            "SELECT COALESCE(SUM(valor), 0) AS total FROM financeiro WHERE tipo='Receber' AND status='Pendente'"
+        ).fetchone()["total"]
+        a_pagar = conn.execute(
+            "SELECT COALESCE(SUM(valor), 0) AS total FROM financeiro WHERE tipo='Pagar' AND status='Pendente'"
+        ).fetchone()["total"]
+        recebido_mes = conn.execute(
+            """SELECT COALESCE(SUM(valor), 0) AS total FROM financeiro
+               WHERE tipo='Receber' AND status='Pago'
+               AND strftime('%Y-%m', data_pagamento) = strftime('%Y-%m', 'now')"""
+        ).fetchone()["total"]
+        pago_mes = conn.execute(
+            """SELECT COALESCE(SUM(valor), 0) AS total FROM financeiro
+               WHERE tipo='Pagar' AND status='Pago'
+               AND strftime('%Y-%m', data_pagamento) = strftime('%Y-%m', 'now')"""
+        ).fetchone()["total"]
+        return {
+            "a_receber": a_receber,
+            "a_pagar": a_pagar,
+            "recebido_mes": recebido_mes,
+            "pago_mes": pago_mes,
+        }
+
+
+def faturamento_por_mes(meses=6):
+    """Faturamento (recebido) dos últimos N meses, mais recente por último."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            f"""SELECT strftime('%Y-%m', data_pagamento) AS mes, SUM(valor) AS total
+                FROM financeiro
+                WHERE tipo='Receber' AND status='Pago'
+                GROUP BY mes
+                ORDER BY mes DESC
+                LIMIT {int(meses)}"""
+        ).fetchall()
+        return list(reversed(rows))

@@ -20,7 +20,7 @@ st.caption("Sistema de orçamentos, financeiro e estoque")
 
 pagina = st.sidebar.radio(
     "Menu",
-    ["Novo orçamento", "Orçamentos", "Clientes", "Produtos / Estoque"],
+    ["Novo orçamento", "Orçamentos", "Financeiro", "Clientes", "Produtos / Estoque"],
 )
 
 # ---------------------------------------------------------------------------
@@ -147,6 +147,14 @@ elif pagina == "Orçamentos":
                 )
                 if novo_status != o["status"]:
                     db.atualizar_status_orcamento(o["id"], novo_status)
+                    if novo_status == "Aprovado" and not db.existe_lancamento_para_orcamento(o["id"]):
+                        db.add_lancamento(
+                            "Receber",
+                            f"Orçamento Nº {o['id']:04d} — {o['cliente_nome']}",
+                            total,
+                            orcamento_id=o["id"],
+                        )
+                        st.toast("Lançamento criado em Financeiro → A receber")
                     st.rerun()
 
                 caminho_pdf = f"orcamentos_pdf/orcamento_{o['id']:04d}.pdf"
@@ -159,6 +167,93 @@ elif pagina == "Orçamentos":
                             mime="application/pdf",
                             key=f"pdf_{o['id']}",
                         )
+
+# ---------------------------------------------------------------------------
+# FINANCEIRO
+# ---------------------------------------------------------------------------
+elif pagina == "Financeiro":
+    st.header("Financeiro")
+
+    resumo = db.resumo_financeiro()
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("A receber", f"R$ {resumo['a_receber']:.2f}")
+    col2.metric("A pagar", f"R$ {resumo['a_pagar']:.2f}")
+    col3.metric("Recebido no mês", f"R$ {resumo['recebido_mes']:.2f}")
+    col4.metric("Pago no mês", f"R$ {resumo['pago_mes']:.2f}")
+
+    st.divider()
+
+    with st.expander("➕ Novo lançamento manual"):
+        with st.form("form_lancamento", clear_on_submit=True):
+            tipo = st.radio("Tipo", ["Receber", "Pagar"], horizontal=True)
+            descricao = st.text_input("Descrição")
+            valor = st.number_input("Valor (R$)", min_value=0.0, step=1.0, format="%.2f")
+            vencimento = st.date_input("Vencimento", value=None)
+            if st.form_submit_button("Adicionar lançamento"):
+                if descricao and valor > 0:
+                    db.add_lancamento(
+                        tipo, descricao, valor, str(vencimento) if vencimento else None
+                    )
+                    st.success("Lançamento adicionado!")
+                    st.rerun()
+                else:
+                    st.error("Preencha a descrição e um valor maior que zero.")
+
+    st.subheader("Faturamento — últimos 6 meses")
+    faturamento = db.faturamento_por_mes(6)
+    if faturamento:
+        st.bar_chart(
+            {row["mes"]: row["total"] for row in faturamento},
+        )
+    else:
+        st.caption("Ainda sem recebimentos registrados.")
+
+    st.subheader("A receber")
+    receber_pendentes = db.get_lancamentos(tipo="Receber", status="Pendente")
+    if receber_pendentes:
+        for l in receber_pendentes:
+            c1, c2, c3 = st.columns([4, 2, 2])
+            venc = f" — vence {l['vencimento']}" if l["vencimento"] else ""
+            c1.write(f"{l['descricao']}{venc}")
+            c2.write(f"R$ {l['valor']:.2f}")
+            if c3.button("Marcar como recebido", key=f"pagar_receber_{l['id']}"):
+                db.marcar_como_pago(l["id"])
+                st.rerun()
+    else:
+        st.caption("Nada pendente para receber.")
+
+    st.subheader("A pagar")
+    pagar_pendentes = db.get_lancamentos(tipo="Pagar", status="Pendente")
+    if pagar_pendentes:
+        for l in pagar_pendentes:
+            c1, c2, c3 = st.columns([4, 2, 2])
+            venc = f" — vence {l['vencimento']}" if l["vencimento"] else ""
+            c1.write(f"{l['descricao']}{venc}")
+            c2.write(f"R$ {l['valor']:.2f}")
+            if c3.button("Marcar como pago", key=f"pagar_pagar_{l['id']}"):
+                db.marcar_como_pago(l["id"])
+                st.rerun()
+    else:
+        st.caption("Nada pendente para pagar.")
+
+    with st.expander("📜 Histórico de lançamentos pagos/recebidos"):
+        pagos = [l for l in db.get_lancamentos(status="Pago")]
+        if pagos:
+            st.dataframe(
+                [
+                    {
+                        "Tipo": l["tipo"],
+                        "Descrição": l["descricao"],
+                        "Valor": f"R$ {l['valor']:.2f}",
+                        "Data": str(l["data_pagamento"])[:16],
+                    }
+                    for l in pagos
+                ],
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.caption("Nenhum lançamento quitado ainda.")
 
 # ---------------------------------------------------------------------------
 # CLIENTES
