@@ -281,6 +281,38 @@ elif pagina == "Clientes":
             use_container_width=True,
             hide_index=True,
         )
+
+        st.subheader("Editar / excluir cliente")
+        cliente_opcoes_edit = {c["nome"]: c["id"] for c in clientes}
+        nome_sel = st.selectbox("Selecione o cliente", list(cliente_opcoes_edit.keys()), key="sel_cliente_edit")
+        cliente_atual = db.get_cliente(cliente_opcoes_edit[nome_sel])
+
+        with st.form("form_editar_cliente"):
+            novo_nome = st.text_input("Nome", value=cliente_atual["nome"])
+            novo_telefone = st.text_input("Telefone (com DDD)", value=cliente_atual["telefone"] or "")
+            novo_endereco = st.text_input("Endereço (opcional)", value=cliente_atual["endereco"] or "")
+            col_salvar, col_excluir = st.columns(2)
+            salvar = col_salvar.form_submit_button("💾 Salvar alterações", type="primary")
+            excluir = col_excluir.form_submit_button("🗑️ Excluir cliente")
+
+            if salvar:
+                if novo_nome:
+                    db.update_cliente(cliente_atual["id"], novo_nome, novo_telefone, novo_endereco)
+                    st.success("Cliente atualizado!")
+                    st.rerun()
+                else:
+                    st.error("Informe ao menos o nome.")
+
+            if excluir:
+                try:
+                    db.excluir_cliente(cliente_atual["id"])
+                    st.success("Cliente excluído!")
+                    st.rerun()
+                except Exception:
+                    st.error(
+                        "Não foi possível excluir: esse cliente já tem orçamentos "
+                        "cadastrados. Você pode editar os dados dele em vez de excluir."
+                    )
     else:
         st.caption("Nenhum cliente cadastrado ainda.")
 

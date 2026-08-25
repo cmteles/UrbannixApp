@@ -95,6 +95,24 @@ def get_clientes():
         return conn.execute("SELECT * FROM clientes ORDER BY nome").fetchall()
 
 
+def get_cliente(cliente_id):
+    with get_conn() as conn:
+        return conn.execute("SELECT * FROM clientes WHERE id = ?", (cliente_id,)).fetchone()
+
+
+def update_cliente(cliente_id, nome, telefone="", endereco=""):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE clientes SET nome = ?, telefone = ?, endereco = ? WHERE id = ?",
+            (nome, telefone, endereco, cliente_id),
+        )
+
+
+def excluir_cliente(cliente_id):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM clientes WHERE id = ?", (cliente_id,))
+
+
 # ---------- PRODUTOS / ESTOQUE ----------
 
 def add_produto(nome, descricao, preco_unitario, estoque_atual, estoque_minimo=0):
